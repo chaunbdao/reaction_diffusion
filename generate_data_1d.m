@@ -6,11 +6,26 @@ function generate_data_1d(points,runtime,t_corr,runs)
 
     dt = 0.1;
     corr_time = t_corr/dt;
-    %a=0.01;
-    %sigma_active = sqrt(0.01/4)*sqrt(2/t_corr);
-    sigma_active = 0.5*sqrt(2/t_corr);
-    %sigma_active = 0.158/t_corr
-    %percent_active = 1;
+
+
+    %Turn on only one of the noise processes below, choosed fixed
+    %integrated strength of fixed instantaneous variance
+
+    %=====
+    % Noise configutation for fixed integrated strength 
+    % C(Δt) = (A/τc) exp(-|Δt|/τc)
+    
+    %noise_amplitude = 1.25;
+    %sigma_active = sqrt(2*noise_amplitude)/t_corr;
+    %=====
+
+    %=====
+    % Noise configutation for fixed instantaneous variance
+    % C(Δt) = eta_std² exp(-|Δt|/τc)
+    
+    eta_std = 0.5;
+    sigma_active = eta_std*sqrt(2/t_corr);
+    %=====
     
     
     %===================================
