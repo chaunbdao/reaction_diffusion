@@ -6,9 +6,26 @@ function generate_data_1d_data_collect(points,runtime,t_corr,patternpoints)
 
     dt = 0.1;
     corr_time = t_corr/dt;
-    %a=0.01;
-    sigma_active = 1/sqrt(t_corr);
-    %percent_active = 1;
+
+
+    %Turn on only one of the noise processes below, choosed fixed
+    %integrated strength of fixed instantaneous variance
+
+    %=====
+    % Noise configutation for fixed integrated strength 
+    % C(Δt) = (A/τc) exp(-|Δt|/τc)
+    
+    %noise_amplitude = 1.25;
+    %sigma_active = sqrt(2*noise_amplitude)/t_corr;
+    %=====
+
+    %=====
+    % Noise configutation for fixed instantaneous variance
+    % C(Δt) = eta_std² exp(-|Δt|/τc)
+    
+    eta_std = 0.5;
+    sigma_active = eta_std*sqrt(2/t_corr);
+    %=====
     
     
     %===================================
@@ -50,9 +67,13 @@ function generate_data_1d_data_collect(points,runtime,t_corr,patternpoints)
         CC = bwconncomp(xmat,8);
         CC2 = CC2periodic(CC,[1,0]);
         stats = regionprops("table", CC2, "BoundingBox", "Area");
-        idx = stats.Area>100 & stats.BoundingBox(:,4)<1000;
-        newstats = stats(idx,:)
-        collected_data = cat(1, collected_data, cat(2, newstats.BoundingBox, newstats.Area))
+        if isempty(stats) || isempty(stats.BoundingBox)
+            newstats = stats
+        else
+            idx = stats.Area>100 & stats.BoundingBox(:,4)<1000;
+            newstats = stats(idx,:)
+            collected_data = cat(1, collected_data, cat(2, newstats.BoundingBox, newstats.Area))
+        end
     end
 
     writematrix(collected_data, "dataforhist.csv")
@@ -71,8 +92,7 @@ function generate_data_1d_data_collect(points,runtime,t_corr,patternpoints)
 		alphavar = 0.5*gamma;
         epsilon = 1;
 		%epsilon = 0.01;
-        %a = 0.1*sqrt(epsilon);
-        a = 0.1;
+        a = 0.1*sqrt(epsilon);
         %epsilon = (a*10)^2;
         %===================================
    
