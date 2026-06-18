@@ -1,0 +1,5 @@
+# Generated simulation outputs
+*.csv
+
+# MATLAB autosave files
+*.asv

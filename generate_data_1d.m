@@ -102,8 +102,12 @@ function generate_data_1d(points,runtime,t_corr,runs)
         CC = bwconncomp(xmat,8);
         CC2 = CC2periodic(CC,[1,0]);
         stats = regionprops("table", CC2, "BoundingBox", "Area");
-        idx = stats.Area>100 & stats.BoundingBox(:,4)<1000;
-        newstats = stats(idx,:)
+        if isempty(stats) || isempty(stats.BoundingBox)
+            newstats = stats
+        else
+            idx = stats.Area>100 & stats.BoundingBox(:,4)<1000;
+            newstats = stats(idx,:)
+        end
     end
 
     function [Xnew, Ynew, eta_new] = rd_step_active(X,Y,eta)
