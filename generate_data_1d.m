@@ -117,7 +117,7 @@ function generate_data_1d(points,runtime,t_corr,runs)
 		DX =1;
 		DY = 5;
         %gamma = 5;
-        t_v = 20;
+        t_v = 25;
         %t_v = 6;
         gamma = 1/t_v;
 
