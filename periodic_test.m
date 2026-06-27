@@ -8,24 +8,33 @@ function periodic_test(points,runtime,t_corr,runs)
     corr_time = t_corr/dt;
 
 
-    %Turn on only one of the noise processes below, choosed fixed
-    %integrated strength of fixed instantaneous variance
+    % Choose one noise process:
+    %   'active_fixed_strength'
+    %   'active_fixed_variance'
+    %   'gaussian_white'
 
-    %=====
-    % Noise configutation for fixed integrated strength
-    % C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
+    noise_mode = ['active_fixed_strength'];
 
-    noise_amplitude = 1.25;
-    sigma_active = sqrt(2*noise_amplitude)/t_corr;
-    %=====
+    if (t_corr == 0)
+        noise_mode = ['gaussian_white'];
+    end
 
-    %=====
-    % Noise configutation for fixed instantaneous variance
-    % C(Delta t) = eta_std^2 exp(-|Delta t|/tauc)
+    noise_amplitude = 0.3; % A for fixed-strength active noise
+    eta_std_fixed_variance = 0.3;
 
-    %eta_std = 0.5;
-    %sigma_active = eta_std*sqrt(2/t_corr);
-    %=====
+    if strcmp(noise_mode,'active_fixed_strength')
+        % C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
+        sigma_active = sqrt(2*noise_amplitude)/t_corr;
+    elseif strcmp(noise_mode,'active_fixed_variance')
+        % C(Delta t) = eta_std^2 exp(-|Delta t|/tauc)
+        eta_std = eta_std_fixed_variance;
+        sigma_active = eta_std*sqrt(2/t_corr);
+    elseif strcmp(noise_mode,'gaussian_white')
+        % White-noise limit of C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
+        sigma_white = sqrt(2*noise_amplitude);
+    else
+        error('Unknown noise_mode: %s', noise_mode);
+    end
 
 
     %===================================
@@ -53,7 +62,8 @@ function periodic_test(points,runtime,t_corr,runs)
     for run_count = 1:runs
         % Some initial conditions for system
         X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.6;
+        Y = ones(points,1)*-0.4;
+        %Y = ones(points,1)*(0.7 - 1)/0.6;
         %X(1)=1;
         eta = zeros(points,1);
 
@@ -73,7 +83,7 @@ function periodic_test(points,runtime,t_corr,runs)
             stdX = std(Xnew);
             stdY = std(Ynew);
 
-            [run_count w meanX stdX meanY stdY max(Xnew)]
+            [run_count w*dt meanX stdX meanY stdY max(Xnew)]
             X = Xnew;
             Y = Ynew;
             datamat(w,run_count)=meanX;
@@ -83,7 +93,7 @@ function periodic_test(points,runtime,t_corr,runs)
                 plot(xvals,Y)
                 hold off
                 ylim([-2 2])
-                pause(0.05)
+                pause(0.001)
                 xmat = [xmat X];
                 ymat = [ymat Y];
             end
@@ -205,10 +215,10 @@ function periodic_test(points,runtime,t_corr,runs)
 
         %Constants relevant to the equation
         %==================================
-        DX =1;
+        DX = 1;
         DY = 5;
         %gamma = 5;
-        t_v = 100;
+        t_v = 25;
         %t_v = 6;
         gamma = 1/t_v;
 
@@ -257,8 +267,15 @@ function periodic_test(points,runtime,t_corr,runs)
             phinew = phinewer;
             phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
         end
-        eta_new = (1-1/corr_time)*eta + normrnd(0,sigma_active*sqrt(dt),points,1);
-        Xnew = Xnew + eta_new*dt;
+        if strcmp(noise_mode,'gaussian_white')
+            eta_new = normrnd(0,sigma_white/sqrt(dt),points,1);
+            Xnew = Xnew + eta_new*dt;
+        elseif strcmp(noise_mode,'active_fixed_strength') || strcmp(noise_mode,'active_fixed_variance')
+            eta_new = (1-1/corr_time)*eta + normrnd(0,sigma_active*sqrt(dt),points,1);
+            Xnew = Xnew + eta_new*dt;
+        else
+            error('Unknown noise_mode: %s', noise_mode);
+        end
         %Ynew = Ynew + normrnd(0,0.5*sqrt(dt),points,1);
     end
 
