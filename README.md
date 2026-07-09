@@ -25,6 +25,11 @@ periodic_test(points, runtime, t_corr, runs)
 - filters out patches that get cutoff by runtime
 - example: periodic_test(1000, 5000, 5, 1)
 
+gen_pd_point(points, runtime, runs, t_corr, t_v)
+- returns the average valid patch spatial size across runs for one phase-diagram point
+- uses periodic spatial boundaries and discards patches cut off by the runtime start or end
+- example: val = gen_pd_point(1000, 5000, 10, 5, 50)
+
 periodic_test_selftest()
 - checks the circular-height and boundary-filter helpers
 
@@ -37,6 +42,7 @@ generate_data_1d is for inspecting individual runs or repeated mean trajectories
 Repeated runs in generate_data_1d collect the mean activator trajectory over time across independent stochastic runs, not patch statistics.
 generate_data_1d_data_collect is for repeatedly sampling patch statistics.
 periodic_test is for checking patch geometry under periodic spatial boundaries.
+gen_pd_point is for producing one scalar patch-spatial-size value for a phase diagram.
 
 generate_data_1d writes xmat.csv and ymat.csv for single runs, or simdat1d_*.csv for repeated runs.
 generate_data_1d_data_collect writes dataforhist.csv.

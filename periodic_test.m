@@ -20,7 +20,7 @@ function periodic_test(points,runtime,t_corr,runs)
     end
 
     noise_amplitude = 0.3; % A for fixed-strength active noise
-    eta_std_fixed_variance = 0.3;
+    eta_std_fixed_variance = 2;
 
     if strcmp(noise_mode,'active_fixed_strength')
         % C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
@@ -218,7 +218,7 @@ function periodic_test(points,runtime,t_corr,runs)
         DX = 1;
         DY = 5;
         %gamma = 5;
-        t_v = 25;
+        t_v = 50;
         %t_v = 6;
         gamma = 1/t_v;
 
