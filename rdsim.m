@@ -16,7 +16,7 @@ function rdsim(points,runtime,nruns,tcorr_start,tcorr_end,tcorr_points,tv_start,
       parpool(pc,workers)
     end
 
-    pdmat = zeros(tv_points, tcorr_points);
+    pdmat = -1*ones(tv_points, tcorr_points);
     tv_step = (tv_end - tv_start)/(tv_points-1);
     tcorr_step = (tcorr_end - tcorr_start)/(tcorr_points-1);
     for tv_count = 1:tv_points
