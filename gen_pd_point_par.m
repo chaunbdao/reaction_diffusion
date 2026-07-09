@@ -19,7 +19,7 @@ function pd_val = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
         noise_mode = ['gaussian_white'];
     end
 
-    noise_amplitude = 0.3; % A for fixed-strength active noise
+    noise_amplitude = 0.5; % A for fixed-strength active noise
     eta_std_fixed_variance = 2;
     sigma_active = NaN;
     sigma_white = NaN;
@@ -59,7 +59,7 @@ function pd_val = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
         % Some initial conditions for system
         xmat = zeros(points,runtime);
         X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.4;
+        Y = ones(points,1)*-0.6;
         %Y = ones(points,1)*(0.7 - 1)/0.6;
         %X(1)=1;
         eta = zeros(points,1);

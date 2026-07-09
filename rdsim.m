@@ -13,7 +13,7 @@ function rdsim(points,runtime,nruns,tcorr_start,tcorr_end,tcorr_points,tv_start,
 
     pool = gcp("nocreate");
     if isempty(pool)
-      parpool(pc,workers)
+      parpool(pc,workers);
     end
 
     pdmat = -1*ones(tv_points, tcorr_points);

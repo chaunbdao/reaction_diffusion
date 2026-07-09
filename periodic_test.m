@@ -19,7 +19,7 @@ function periodic_test(points,runtime,t_corr,runs)
         noise_mode = ['gaussian_white'];
     end
 
-    noise_amplitude = 0.3; % A for fixed-strength active noise
+    noise_amplitude = 0.5; % A for fixed-strength active noise
     eta_std_fixed_variance = 2;
 
     if strcmp(noise_mode,'active_fixed_strength')
@@ -62,7 +62,7 @@ function periodic_test(points,runtime,t_corr,runs)
     for run_count = 1:runs
         % Some initial conditions for system
         X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.4;
+        Y = ones(points,1)*-0.6;
         %Y = ones(points,1)*(0.7 - 1)/0.6;
         %X(1)=1;
         eta = zeros(points,1);
