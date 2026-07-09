@@ -30,23 +30,30 @@ gen_pd_point(points, runtime, runs, t_corr, t_v)
 - uses periodic spatial boundaries and discards patches cut off by the runtime start or end
 - example: val = gen_pd_point(1000, 5000, 10, 5, 50)
 
+gen_pd_point_par(points, runtime, runs, t_corr, t_v)
+- parallel version of gen_pd_point using parfor over independent runs
+- requires an active MATLAB parallel pool
+- example: val = gen_pd_point_par(1000, 5000, 10, 5, 50)
+
+rdsim(points, runtime, nruns, tcorr_start, tcorr_end, tcorr_points, tv_start, tv_end, tv_points, workers)
+- phase-diagram driver that calls gen_pd_point_par over a t_corr by t_v grid
+- starts a Rivanna-style local parallel pool with job storage under scratch
+- writes pdmat.csv
+
 periodic_test_selftest()
 - checks the circular-height and boundary-filter helpers
-
-x_first_passage/x_first_passage_tcorr_sweep.py
-- reduced X first-passage sweep with reaction and diffusion removed
-- writes a table, density CSV, and overlay plot
-- example: python3 x_first_passage/x_first_passage_tcorr_sweep.py
 
 generate_data_1d is for inspecting individual runs or repeated mean trajectories.
 Repeated runs in generate_data_1d collect the mean activator trajectory over time across independent stochastic runs, not patch statistics.
 generate_data_1d_data_collect is for repeatedly sampling patch statistics.
 periodic_test is for checking patch geometry under periodic spatial boundaries.
 gen_pd_point is for producing one scalar patch-spatial-size value for a phase diagram.
+gen_pd_point_par and rdsim are for parallel phase-diagram runs on Rivanna.
 
 generate_data_1d writes xmat.csv and ymat.csv for single runs, or simdat1d_*.csv for repeated runs.
 generate_data_1d_data_collect writes dataforhist.csv.
 periodic_test writes periodic_test_xmat.csv, periodic_test_ymat.csv, periodic_test_data.csv, and periodic_test_summary.csv for single runs.
+rdsim writes pdmat.csv.
 
 ## Parameters
 Edit model parameters inside rd_step_active in each file:
