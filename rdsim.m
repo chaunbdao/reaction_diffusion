@@ -24,7 +24,7 @@ function rdsim(points,runtime,nruns,tcorr_start,tcorr_end,tcorr_points,tv_start,
             tv = tv_start + tv_step * (tv_count - 1);
             tcorr = tcorr_start + tcorr_step * (tcorr_count - 1);
             pdmat(tv_count,tcorr_count) = gen_pd_point_par(points,runtime,nruns,tcorr,tv);
+            writematrix(pdmat, "pdmat.csv");
         end 
     end 
-    writematrix(pdmat, "pdmat.csv")
 end
