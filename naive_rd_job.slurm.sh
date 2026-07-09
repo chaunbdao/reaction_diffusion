@@ -16,7 +16,7 @@ module load matlab
 
 export slurm_ID="${SLURM_JOB_ID}"
 
-# Set workers to one less that number of tasks (leave 1 for master process)
+# Set workers to one less than the number of tasks (leave 1 for master process)
 export numWorkers=$((SLURM_NTASKS-1))
 
 
@@ -26,10 +26,10 @@ runtime=5000; 		# number of timesteps
 nRuns=5; 			# number of collected for a given
 tcorr_start=0.5;	# start for correlation time sweep
 tcorr_end=5;		# end for correlation time sweep (inclusive)
-tcorr_points=5;	# points for correlation time sweep
+tcorr_points=5;		# points for correlation time sweep
 tv_start=10;		# start for tau_v sweep
 tv_end=50;			# end for tau_v sweep
 tv_points=5;		# points for tau_v sweep
 
-# Run Matlab single core program
+# Run Matlab parallel program
 matlab -batch "rdsim(${points},${runtime},${nRuns},${tcorr_start},${tcorr_end},${tcorr_points},${tv_start},${tv_end},${tv_points},${numWorkers}); exit;"

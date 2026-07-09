@@ -1,86 +1,27 @@
 # reactiondiffusion
-MATLAB scripts for 1D stochastic reaction-diffusion simulations with active Ornstein-Uhlenbeck noise.
+MATLAB scripts for 1D stochastic reaction-diffusion simulations.
 
-## Scripts
+## Active Files
 
-generate_data_1d(points, runtime, t_corr, runs)
-- points: number of spatial grid points
-- runtime: number of time steps
-- t_corr: active-noise correlation time
-- runs: number of independent simulations
-- use runs == 1 to plot one simulation and detect patches
-- use runs > 1 to run repeated simulations
-- example: generate_data_1d(1000, 5000, 5, 1)
+- `gen_pd_point.m`: serial calculation for one `(t_corr, t_v)` point; returns average valid patch spatial size.
+- `gen_pd_point_par.m`: parallel version using `parfor` over independent runs; requires an active MATLAB parallel pool.
+- `rdsim.m`: phase-diagram driver over a `t_corr` by `t_v` grid; calls `gen_pd_point_par` and writes `pdmat.csv`.
+- `periodic_test.m`: diagnostic script for checking periodic-boundary patch geometry.
+- `CC2periodic.m`: helper for merging connected components across periodic boundaries.
+- `naive_rd_job.slurm.sh`: Rivanna Slurm script for running `rdsim`.
 
-generate_data_1d_data_collect(points, runtime, t_corr, patternpoints)
-- points: number of spatial grid points
-- runtime: number of time steps per simulation
-- t_corr: active-noise correlation time
-- patternpoints: number of detected patches to collect
-- repeats simulations until enough patches are found
-- example: generate_data_1d_data_collect(1000, 5000, 5, 100)
+## Rivanna
 
-periodic_test(points, runtime, t_corr, runs)
-- like generate_data_1d, but yields correct size for patches wrapping around boundary, fixes issue with regionprops height
-- filters out patches that get cutoff by runtime
-- example: periodic_test(1000, 5000, 5, 1)
+Submit from the repo directory:
 
-gen_pd_point(points, runtime, runs, t_corr, t_v)
-- returns the average valid patch spatial size across runs for one phase-diagram point
-- uses periodic spatial boundaries and discards patches cut off by the runtime start or end
-- example: val = gen_pd_point(1000, 5000, 10, 5, 50)
-
-gen_pd_point_par(points, runtime, runs, t_corr, t_v)
-- parallel version of gen_pd_point using parfor over independent runs
-- requires an active MATLAB parallel pool
-- example: val = gen_pd_point_par(1000, 5000, 10, 5, 50)
-
-rdsim(points, runtime, nruns, tcorr_start, tcorr_end, tcorr_points, tv_start, tv_end, tv_points, workers)
-- phase-diagram driver that calls gen_pd_point_par over a t_corr by t_v grid
-- starts a Rivanna-style local parallel pool with job storage under scratch
-- writes pdmat.csv
-
-periodic_test_selftest()
-- checks the circular-height and boundary-filter helpers
-
-generate_data_1d is for inspecting individual runs or repeated mean trajectories.
-Repeated runs in generate_data_1d collect the mean activator trajectory over time across independent stochastic runs, not patch statistics.
-generate_data_1d_data_collect is for repeatedly sampling patch statistics.
-periodic_test is for checking patch geometry under periodic spatial boundaries.
-gen_pd_point is for producing one scalar patch-spatial-size value for a phase diagram.
-gen_pd_point_par and rdsim are for parallel phase-diagram runs on Rivanna.
-
-generate_data_1d writes xmat.csv and ymat.csv for single runs, or simdat1d_*.csv for repeated runs.
-generate_data_1d_data_collect writes dataforhist.csv.
-periodic_test writes periodic_test_xmat.csv, periodic_test_ymat.csv, periodic_test_data.csv, and periodic_test_summary.csv for single runs.
-rdsim writes pdmat.csv.
-
-## Parameters
-Edit model parameters inside rd_step_active in each file:
-
-```matlab
-DX = 1;              % activator diffusion
-DY = 5;              % inhibitor diffusion
-t_v = 20;            % tau_v
-gamma = 1/t_v;
-betavar = 0.7*gamma; % beta = 0.7
-alphavar = 0.5*gamma;% alpha = 0.5
-epsilon = 1;
-a = 0.1*sqrt(epsilon);
+```bash
+sbatch naive_rd_job.slurm.sh
 ```
-Some scripts currently use different t_v values for tests or comparisons.
-Edit active-noise parameters near the top of each file.
-Current fixed-instantaneous-variance choice:
 
-```matlab
-eta_std = 0.5;
-sigma_active = eta_std*sqrt(2/t_corr);
-```
-Fixed-integrated-strength alternative:
+The Slurm script requests one node, sets `numWorkers = SLURM_NTASKS - 1`, and passes that worker count into `rdsim`.
 
-```matlab
-noise_amplitude = 1.25;
-sigma_active = sqrt(2*noise_amplitude)/t_corr;
-```
+## Deprecated
+
+Older scripts are kept in `deprecated/` and are not part of the current phase-diagram workflow.
 
 Generated CSV files are ignored by Git.
