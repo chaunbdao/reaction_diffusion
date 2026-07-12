@@ -1,4 +1,4 @@
-function pd_val = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
+function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
 
     %=====================================
     % Important Parameters
@@ -54,7 +54,9 @@ function pd_val = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
     %=====================================
 
     total_patch_spatial_size = 0;
+    total_patch_lifetime = 0;
     num_patches = 0;
+    runs_with_patches = 0;
     parfor run_count = 1:runs
         % Some initial conditions for system
         xmat = zeros(points,runtime);
@@ -84,15 +86,24 @@ function pd_val = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
             ~stats.TouchesInitialTime & ...
             ~stats.TouchesFinalTime,:);
 
+        patches_this_run = height(stats);
         total_patch_spatial_size = total_patch_spatial_size + sum(stats.PeriodicHeightPixels);
-        num_patches = num_patches + height(stats);
+        total_patch_lifetime = total_patch_lifetime + sum(stats.DurationPixels) * dt;
+        num_patches = num_patches + patches_this_run;
+        if patches_this_run > 0
+            runs_with_patches = runs_with_patches + 1;
+        end
     end
 
     if num_patches > 0
         pd_val = total_patch_spatial_size / num_patches;
+        avg_patch_lifetime = total_patch_lifetime / num_patches;
     else
         pd_val = 0;
+        avg_patch_lifetime = 0;
     end
+
+    patch_run_percent = 100 * runs_with_patches / runs;
 
 end
 
