@@ -1,0 +1,40 @@
+periodic_test(1000,500,0,0) parameters
+=======================================
+
+Inputs
+------
+points = 1000
+runtime = 500
+t_corr = 0
+plot_each_step = false
+
+Time
+----
+dt = 0.001
+snapshot_dt = 0.1
+num_steps = 500000
+num_snapshots = 5000
+
+Noise
+-----
+noise_mode = gaussian_white
+noise_amplitude = 0.5
+sigma_white = 1
+eta_std_fixed_variance = 2
+
+Initial condition
+-----------------
+X0 = -1.0
+Y0 = -0.6
+eta0 = 0
+
+Model parameters
+----------------
+DX = 1
+DY = 5
+t_v = 25
+gamma = 0.04
+alpha = 0.5
+beta = 0.7
+epsilon = 1
+a = 0.1

@@ -211,13 +211,15 @@ function [Xnew, Ynew, eta_new] = rd_step_active(X,Y,eta)
         phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
 
         %fixed point iteration, up to machine precision
-        while norm(phinewer-phinew)>(1*10^-15)
-            b1 = Bmat1*X+dt/2*(phi+phinew);
+        iterations = 0;
+        while (norm(phinewer-phinew)>(1*10^-10) && iterations <100)
+            b1 = Bmat1*X+dt/2*(phi+phinewer);
             XYnew = BigA\[b1;b2];
             Xnew = XYnew(1:points);
             Ynew = XYnew(points+1:end);
             phinew = phinewer;
             phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
+            iterations = iterations + 1;
         end
         if strcmp(noise_mode,'gaussian_white')
             eta_new = normrnd(0,sigma_white/sqrt(dt),points,1);

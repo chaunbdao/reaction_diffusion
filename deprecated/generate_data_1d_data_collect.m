@@ -125,13 +125,15 @@ function generate_data_1d_data_collect(points,runtime,t_corr,patternpoints)
 		phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
         
         %fixed point iteration, up to machine precision
-        while norm(phinewer-phinew)>(1*10^-15)
-			b1 = Bmat1*X+dt/2*(phi+phinew);
+        iterations = 0;
+        while (norm(phinewer-phinew)>(1*10^-10) && iterations <100)
+			b1 = Bmat1*X+dt/2*(phi+phinewer);
 			XYnew = BigA\[b1;b2];
 			Xnew = XYnew(1:points);
 			Ynew = XYnew(points+1:end);
             phinew = phinewer;
 			phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
+            iterations = iterations + 1;
         end
         eta_new = (1-1/corr_time)*eta + normrnd(0,sigma_active*sqrt(dt),points,1);
         Xnew = Xnew + eta_new*dt;

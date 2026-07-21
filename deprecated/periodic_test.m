@@ -1,11 +1,41 @@
-function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par(points,runtime,runs,t_corr,t_v)
+function periodic_test(points,runtime,t_corr,plot_each_step)
+
+    % runtime is the total physical simulation time, not the number of
+    % integration steps. For example, runtime = 500 simulates t = 0..500.
+    % plot_each_step controls live animation. Snapshots are always saved
+    % every snapshot_dt, and periodic_test always performs exactly one run.
+
+    if ~(isscalar(plot_each_step) && ...
+            (islogical(plot_each_step) || ...
+            (isnumeric(plot_each_step) && ismember(plot_each_step,[0,1]))))
+        error('plot_each_step must be a logical scalar (true or false).');
+    end
+    plot_each_step = logical(plot_each_step);
 
     %=====================================
     % Important Parameters
     %=====================================
 
-    dt = 0.1;
+    dt = 0.001;
+    snapshot_dt = 0.1;
     corr_time = t_corr/dt;
+
+    num_steps = round(runtime/dt);
+    steps_per_snapshot = round(snapshot_dt/dt);
+    num_snapshots = round(runtime/snapshot_dt);
+
+    time_tolerance = 100*eps(max([runtime,snapshot_dt,dt]));
+    if abs(num_steps*dt-runtime) > time_tolerance
+        error('runtime must be an integer multiple of dt.');
+    end
+    if abs(steps_per_snapshot*dt-snapshot_dt) > time_tolerance
+        error('snapshot_dt must be an integer multiple of dt.');
+    end
+    if abs(num_snapshots*snapshot_dt-runtime) > time_tolerance
+        error('runtime must be an integer multiple of snapshot_dt.');
+    end
+
+    snapshot_times = (1:num_snapshots)*snapshot_dt;
 
 
     % Choose one noise process:
@@ -21,8 +51,6 @@ function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par(poin
 
     noise_amplitude = 0.5; % A for fixed-strength active noise
     eta_std_fixed_variance = 2;
-    sigma_active = NaN;
-    sigma_white = NaN;
 
     if strcmp(noise_mode,'active_fixed_strength')
         % C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
@@ -53,61 +81,94 @@ function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par(poin
     % Simulation Loop
     %=====================================
 
-    total_patch_spatial_size = 0;
-    total_patch_lifetime = 0;
-    num_patches = 0;
-    runs_with_patches = 0;
-    parfor run_count = 1:runs
-        % Some initial conditions for system
-        xmat = zeros(points,runtime);
-        X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.6;
-        %Y = ones(points,1)*(0.7 - 1)/0.6;
-        %X(1)=1;
-        eta = zeros(points,1);
-        for w = 1:runtime
-            [Xnew,Ynew,eta_new] = rd_step_active( ...
-                X,Y,eta,dt,t_v,glaplacian,points,noise_mode,corr_time,sigma_active,sigma_white);
-            eta=eta_new;
+    % Some initial conditions for the single diagnostic run
+    X = ones(points,1)*-1.0;
+    Y = ones(points,1)*-0.4;
+    %Y = ones(points,1)*(0.7 - 1)/0.6;
+    %X(1)=1;
+    eta = zeros(points,1);
 
-            X = Xnew;
-            Y = Ynew;
-            xmat(:,w) = X;
+    xvals = linspace(0,2*3.14,points);
+    xmat = zeros(points,num_snapshots);
+    ymat = zeros(points,num_snapshots);
+
+    if plot_each_step
+        figure
+        hX = plot(xvals,X);
+        hold on
+        hY = plot(xvals,Y);
+        hold off
+        ylim([-2 2])
+        drawnow
+    end
+
+    snapshot_count = 0;
+    for w = 1:num_steps
+        [Xnew,Ynew,eta_new] = rd_step_active(X,Y,eta);
+        eta=eta_new;
+        X = Xnew;
+        Y = Ynew;
+
+        if plot_each_step
+            hX.YData = X;
+            hY.YData = Y;
+            drawnow
         end
 
-        xmask = xmat>0.5;
-        CC = bwconncomp(xmask,8);
-        CC2 = CC2periodic(CC,[1,0]);
+        if mod(w,steps_per_snapshot) == 0
+            snapshot_count = snapshot_count + 1;
+            meanX = mean(X);
+            meanY = mean(Y);
+            stdX = std(X);
+            stdY = std(Y);
 
-        stats = periodic_component_stats(CC2, points, run_count);
-
-        stats = stats( ...
-            stats.SpaceTimeArea >= 100 & ...
-            ~stats.TouchesInitialTime & ...
-            ~stats.TouchesFinalTime,:);
-
-        patches_this_run = height(stats);
-        total_patch_spatial_size = total_patch_spatial_size + sum(stats.PeriodicHeightPixels);
-        total_patch_lifetime = total_patch_lifetime + sum(stats.DurationPixels) * dt;
-        num_patches = num_patches + patches_this_run;
-        if patches_this_run > 0
-            runs_with_patches = runs_with_patches + 1;
+            [w*dt meanX stdX meanY stdY max(X)]
+            xmat(:,snapshot_count) = X;
+            ymat(:,snapshot_count) = Y;
         end
     end
 
-    if num_patches > 0
-        pd_val = total_patch_spatial_size / num_patches;
-        avg_patch_lifetime = total_patch_lifetime / num_patches;
-    else
-        pd_val = 0;
-        avg_patch_lifetime = 0;
+    figure
+    [tvals,dvals] = meshgrid(snapshot_times,xvals);
+    s = surf(tvals,dvals,xmat);
+    s.EdgeColor = 'none';
+    xlabel('time')
+    ylabel('space')
+    writematrix(xmat,"periodic_test_xmat.csv")
+    writematrix(ymat,"periodic_test_ymat.csv")
+
+    xmask = xmat>0.5;
+    CC = bwconncomp(xmask,8);
+    CC2 = CC2periodic(CC,[1,0]);
+
+    comparison_stats = periodic_component_stats(CC2, points, 1);
+    comparison_stats = comparison_stats( ...
+        comparison_stats.SpaceTimeArea >= 100 & ...
+        ~comparison_stats.TouchesInitialTime & ...
+        ~comparison_stats.TouchesFinalTime,:);
+    periodic_test_summary = periodic_summary_table(comparison_stats)
+    writetable(comparison_stats, "periodic_test_data.csv")
+    writetable(periodic_test_summary, "periodic_test_summary.csv")
+
+    function summary_table = periodic_summary_table(stats_table)
+        summary_table = stats_table(:,{ ...
+            'Component', ...
+            'PeriodicHeightPixels', ...
+            'RegionPropsHeightPixels', ...
+            'HeightDifference', ...
+            'DurationPixels', ...
+            'DurationTime', ...
+            'RegionPropsDurationPixels', ...
+            'RegionPropsDurationTime', ...
+            'DurationDifference', ...
+            'SpaceTimeArea', ...
+            'RegionPropsArea', ...
+            'AreaDifference', ...
+            'TouchesInitialTime', ...
+            'TouchesFinalTime'});
     end
 
-    patch_run_percent = 100 * runs_with_patches / runs;
-
-end
-
-function stats_table = periodic_component_stats(CC2, points, run_count)
+    function stats_table = periodic_component_stats(CC2, points, run_count)
         region_stats = regionprops("table", CC2, "BoundingBox", "Area");
         num_objects = CC2.NumObjects;
 
@@ -115,9 +176,11 @@ function stats_table = periodic_component_stats(CC2, points, run_count)
         Component = zeros(num_objects,1);
         PeriodicHeightPixels = zeros(num_objects,1);
         DurationPixels = zeros(num_objects,1);
+        DurationTime = zeros(num_objects,1);
         SpaceTimeArea = zeros(num_objects,1);
         RegionPropsHeightPixels = zeros(num_objects,1);
         RegionPropsDurationPixels = zeros(num_objects,1);
+        RegionPropsDurationTime = zeros(num_objects,1);
         RegionPropsArea = zeros(num_objects,1);
         RegionPropsXMin = zeros(num_objects,1);
         RegionPropsYMin = zeros(num_objects,1);
@@ -134,11 +197,13 @@ function stats_table = periodic_component_stats(CC2, points, run_count)
             Component(k) = k;
             PeriodicHeightPixels(k) = circular_height(unique(rows), points);
             DurationPixels(k) = max(cols) - min(cols) + 1;
+            DurationTime(k) = DurationPixels(k)*snapshot_dt;
             SpaceTimeArea(k) = numel(rows);
 
             RegionPropsXMin(k) = region_stats.BoundingBox(k,1);
             RegionPropsYMin(k) = region_stats.BoundingBox(k,2);
             RegionPropsDurationPixels(k) = region_stats.BoundingBox(k,3);
+            RegionPropsDurationTime(k) = RegionPropsDurationPixels(k)*snapshot_dt;
             RegionPropsHeightPixels(k) = region_stats.BoundingBox(k,4);
             RegionPropsArea(k) = region_stats.Area(k);
             HeightDifference(k) = RegionPropsHeightPixels(k) - PeriodicHeightPixels(k);
@@ -153,9 +218,11 @@ function stats_table = periodic_component_stats(CC2, points, run_count)
             Component, ...
             PeriodicHeightPixels, ...
             DurationPixels, ...
+            DurationTime, ...
             SpaceTimeArea, ...
             RegionPropsHeightPixels, ...
             RegionPropsDurationPixels, ...
+            RegionPropsDurationTime, ...
             RegionPropsArea, ...
             RegionPropsXMin, ...
             RegionPropsYMin, ...
@@ -164,9 +231,9 @@ function stats_table = periodic_component_stats(CC2, points, run_count)
             AreaDifference, ...
             TouchesInitialTime, ...
             TouchesFinalTime);
-end
+    end
 
-function height_pixels = circular_height(rows, points)
+    function height_pixels = circular_height(rows, points)
         rows = sort(rows(:));
 
         if isempty(rows)
@@ -178,16 +245,17 @@ function height_pixels = circular_height(rows, points)
             wrap_gap = rows(1) + points - rows(end);
             height_pixels = points - max([gaps; wrap_gap]) + 1;
         end
-end
+    end
 
-function [Xnew, Ynew, eta_new] = rd_step_active( ...
-    X,Y,eta,dt,t_v,glaplacian,points,noise_mode,corr_time,sigma_active,sigma_white)
+    function [Xnew, Ynew, eta_new] = rd_step_active(X,Y,eta)
 
         %Constants relevant to the equation
         %==================================
         DX = 1;
         DY = 5;
         %gamma = 5;
+        t_v = 5;
+        %t_v = 6;
         gamma = 1/t_v;
 
         betavar = 0.7*gamma;
@@ -247,4 +315,10 @@ function [Xnew, Ynew, eta_new] = rd_step_active( ...
             error('Unknown noise_mode: %s', noise_mode);
         end
         %Ynew = Ynew + normrnd(0,0.5*sqrt(dt),points,1);
+    end
+
+    %function [patterns] = analyze(X)
+
+    %end
+
 end

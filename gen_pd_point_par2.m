@@ -1,11 +1,13 @@
-function periodic_test(points,runtime,t_corr,runs)
+function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par2(points,physical_runtime,runs,t_corr,t_v,dt,A,snapshot_dt)
 
     %=====================================
     % Important Parameters
     %=====================================
 
-    dt = 0.1;
     corr_time = t_corr/dt;
+    num_steps = round(physical_runtime/dt);
+    steps_per_snapshot = round(snapshot_dt/dt);
+    num_snapshots = round(physical_runtime/snapshot_dt);
 
 
     % Choose one noise process:
@@ -19,8 +21,10 @@ function periodic_test(points,runtime,t_corr,runs)
         noise_mode = ['gaussian_white'];
     end
 
-    noise_amplitude = 0.5; % A for fixed-strength active noise
+    noise_amplitude = A; % A for fixed-strength active noise
     eta_std_fixed_variance = 2;
+    sigma_active = NaN;
+    sigma_white = NaN;
 
     if strcmp(noise_mode,'active_fixed_strength')
         % C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
@@ -47,98 +51,103 @@ function periodic_test(points,runtime,t_corr,runs)
     glaplacian(1,points)=1;
     glaplacian(points,1)=1;
 
+    %===================================
+    % Precomputing the timestep matrices
+    %===================================
+
+    DX = 1;
+    DY = 5;
+    gamma = 1/t_v;
+
+    betavar = 0.7*gamma;
+    alphavar = 0.5*gamma;
+    epsilon = 1;
+    a = 0.1*sqrt(epsilon);
+
+    mu1 = DX*dt/a/a/2;
+    mu2 = DY*dt/a/a/2;
+    identity = speye(points);
+
+    Bmat1 = (1-2*mu1)*identity + mu1*glaplacian;
+    Bmat2 = (1-2*mu2-alphavar*dt/2)*identity + mu2*glaplacian;
+    Amat1 = (1+2*mu1)*identity - mu1*glaplacian;
+    Amat2 = (1+2*mu2+alphavar*dt/2)*identity - mu2*glaplacian;
+    C = (dt/2)*identity;
+
+    BigA = [Amat1 sparse(points,points); -C*gamma Amat2];
+
+    % decomposition objects cannot be serialized reliably to process
+    % workers. Build one from the precomputed matrix on each worker, then
+    % reuse it for every timestep and every run assigned to that worker.
+    BigA_solver_constant = parallel.pool.Constant( ...
+        @() decomposition(BigA,'lu'));
+
     %=====================================
     % Simulation Loop
     %=====================================
 
-    csv = '.csv';
-    runtxt = 'runs';
-    pointtxt = 'points';
-    tau='tau';
-    time='time';
-    simdat = 'simdat1d_';
-    filename = strcat(simdat,num2str(points),pointtxt,num2str(runtime),time,num2str(corr_time),tau,num2str(runs),runtxt,csv);
-    datamat=zeros(runtime,runs);
-    for run_count = 1:runs
+    total_patch_spatial_size = 0;
+    total_patch_lifetime = 0;
+    num_patches = 0;
+    runs_with_patches = 0;
+    parfor run_count = 1:runs
+        BigA_solver = BigA_solver_constant.Value;
+
         % Some initial conditions for system
+        xmat = zeros(points,num_snapshots);
         X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.6;
+        Y = ones(points,1)*-0.4;
         %Y = ones(points,1)*(0.7 - 1)/0.6;
         %X(1)=1;
         eta = zeros(points,1);
-
-        if (runs==1)
-            figure
-            xvals = linspace(0,2*3.14,points);
-            xmat = [];
-            ymat = [];
-        end
-
-        for w = 1:runtime
-            [Xnew,Ynew,eta_new] = rd_step_active(X,Y,eta);
+        snapshot_count = 0;
+        for w = 1:num_steps
+            [Xnew,Ynew,eta_new] = rd_step_active( ...
+                X,Y,eta,dt,points,noise_mode,corr_time,sigma_active,sigma_white, ...
+                gamma,betavar,epsilon,Bmat1,Bmat2,BigA_solver);
             eta=eta_new;
 
-            meanX = mean(Xnew);
-            meanY = mean(Ynew);
-            stdX = std(Xnew);
-            stdY = std(Ynew);
-
-            [run_count w*dt meanX stdX meanY stdY max(Xnew)]
             X = Xnew;
             Y = Ynew;
-            datamat(w,run_count)=meanX;
-            if (runs==1)
-                plot(xvals,X)
-                hold on
-                plot(xvals,Y)
-                hold off
-                ylim([-2 2])
-                pause(0.001)
-                xmat = [xmat X];
-                ymat = [ymat Y];
+            if mod(w,steps_per_snapshot) == 0
+                snapshot_count = snapshot_count + 1;
+                xmat(:,snapshot_count) = X;
             end
         end
-    end
-    if (runs>1)
-        writematrix(datamat,filename)
-    else
-        [tvals,dvals] = meshgrid(1:runtime,xvals);
-        s = surf(tvals,dvals,xmat);
-        s.EdgeColor = 'none';
-        writematrix(xmat,"periodic_test_xmat.csv")
-        writematrix(ymat,"periodic_test_ymat.csv")
 
-        xmat = xmat>0.5;
-        CC = bwconncomp(xmat,8);
+        xmask = xmat>0.5;
+        CC = bwconncomp(xmask,8);
         CC2 = CC2periodic(CC,[1,0]);
 
-        comparison_stats = periodic_component_stats(CC2, points, run_count);
-        comparison_stats = comparison_stats( ...
-            comparison_stats.SpaceTimeArea >= 100 & ...
-            ~comparison_stats.TouchesInitialTime & ...
-            ~comparison_stats.TouchesFinalTime,:);
-        periodic_test_summary = periodic_summary_table(comparison_stats)
-        writetable(comparison_stats, "periodic_test_data.csv")
-        writetable(periodic_test_summary, "periodic_test_summary.csv")
+        stats = periodic_component_stats(CC2, points, run_count);
+
+        stats = stats( ...
+            stats.SpaceTimeArea >= 100 & ...
+            ~stats.TouchesInitialTime & ...
+            ~stats.TouchesFinalTime,:);
+
+        patches_this_run = height(stats);
+        total_patch_spatial_size = total_patch_spatial_size + sum(stats.PeriodicHeightPixels);
+        total_patch_lifetime = total_patch_lifetime + sum(stats.DurationPixels) * snapshot_dt;
+        num_patches = num_patches + patches_this_run;
+        if patches_this_run > 0
+            runs_with_patches = runs_with_patches + 1;
+        end
     end
 
-    function summary_table = periodic_summary_table(stats_table)
-        summary_table = stats_table(:,{ ...
-            'Component', ...
-            'PeriodicHeightPixels', ...
-            'RegionPropsHeightPixels', ...
-            'HeightDifference', ...
-            'DurationPixels', ...
-            'RegionPropsDurationPixels', ...
-            'DurationDifference', ...
-            'SpaceTimeArea', ...
-            'RegionPropsArea', ...
-            'AreaDifference', ...
-            'TouchesInitialTime', ...
-            'TouchesFinalTime'});
+    if num_patches > 0
+        pd_val = total_patch_spatial_size / num_patches;
+        avg_patch_lifetime = total_patch_lifetime / num_patches;
+    else
+        pd_val = 0;
+        avg_patch_lifetime = 0;
     end
 
-    function stats_table = periodic_component_stats(CC2, points, run_count)
+    patch_run_percent = 100 * runs_with_patches / runs;
+
+end
+
+function stats_table = periodic_component_stats(CC2, points, run_count)
         region_stats = regionprops("table", CC2, "BoundingBox", "Area");
         num_objects = CC2.NumObjects;
 
@@ -195,9 +204,9 @@ function periodic_test(points,runtime,t_corr,runs)
             AreaDifference, ...
             TouchesInitialTime, ...
             TouchesFinalTime);
-    end
+end
 
-    function height_pixels = circular_height(rows, points)
+function height_pixels = circular_height(rows, points)
         rows = sort(rows(:));
 
         if isempty(rows)
@@ -209,63 +218,32 @@ function periodic_test(points,runtime,t_corr,runs)
             wrap_gap = rows(1) + points - rows(end);
             height_pixels = points - max([gaps; wrap_gap]) + 1;
         end
-    end
+end
 
-    function [Xnew, Ynew, eta_new] = rd_step_active(X,Y,eta)
-
-        %Constants relevant to the equation
-        %==================================
-        DX = 1;
-        DY = 5;
-        %gamma = 5;
-        t_v = 50;
-        %t_v = 6;
-        gamma = 1/t_v;
-
-        betavar = 0.7*gamma;
-        alphavar = 0.5*gamma;
-        epsilon = 1;
-        %epsilon = 0.01;
-        a = 0.1*sqrt(epsilon);
-        %epsilon = (a*10)^2;
-        %===================================
-
+function [Xnew, Ynew, eta_new] = rd_step_active( ...
+    X,Y,eta,dt,points,noise_mode,corr_time,sigma_active,sigma_white, ...
+    gamma,betavar,epsilon,Bmat1,Bmat2,BigA_solver)
 
         phi = (1/epsilon)*(1.-(X.*X)).*(X-Y);
         phinew = phi;
 
-        mu1 = DX*dt/a/a/2;
-        mu2 = DY*dt/a/a/2;
-        Amat1 = -1*mu1*glaplacian;
-        Amat2 = -1*mu2*glaplacian;
-        Bmat1 = mu1*glaplacian;
-        Bmat2 = mu2*glaplacian;
-
-        for m = 1:points
-            Amat1(m,m) = (1+2*mu1);
-            Bmat1(m,m) = (1-2*mu1);
-            Amat2(m,m) = (1+2*mu2) + alphavar*dt/2;
-            Bmat2(m,m) = (1-2*mu2) - alphavar*dt/2;
-        end
-
-        C = spdiags((dt/2)*ones(points,1),0,points,points);
-
-        BigA = [Amat1 zeros(points); -C*gamma Amat2];
         b1 = Bmat1*X+dt/2*(phi+phinew);
         b2 = dt*betavar + Bmat2*Y + gamma*X*dt/2;
-        XYnew = BigA\[b1;b2];
+        XYnew = BigA_solver\[b1;b2];
         Xnew = XYnew(1:points);
         Ynew = XYnew(points+1:end);
         phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
 
         %fixed point iteration, up to machine precision
-        while norm(phinewer-phinew)>(1*10^-15)
-            b1 = Bmat1*X+dt/2*(phi+phinew);
-            XYnew = BigA\[b1;b2];
+        iterations = 0;
+        while (norm(phinewer-phinew)>(1*10^-10) && iterations <100)
+            b1 = Bmat1*X+dt/2*(phi+phinewer);
+            XYnew = BigA_solver\[b1;b2];
             Xnew = XYnew(1:points);
             Ynew = XYnew(points+1:end);
             phinew = phinewer;
             phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
+            iterations = iterations + 1; 
         end
         if strcmp(noise_mode,'gaussian_white')
             eta_new = normrnd(0,sigma_white/sqrt(dt),points,1);
@@ -277,10 +255,4 @@ function periodic_test(points,runtime,t_corr,runs)
             error('Unknown noise_mode: %s', noise_mode);
         end
         %Ynew = Ynew + normrnd(0,0.5*sqrt(dt),points,1);
-    end
-
-    %function [patterns] = analyze(X)
-
-    %end
-
 end
