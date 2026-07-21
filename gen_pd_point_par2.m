@@ -96,7 +96,7 @@ function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par2(poi
         % Some initial conditions for system
         xmat = zeros(points,num_snapshots);
         X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.4;
+        Y = ones(points,1)*-0.6;
         %Y = ones(points,1)*(0.7 - 1)/0.6;
         %X(1)=1;
         eta = zeros(points,1);
