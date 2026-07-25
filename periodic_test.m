@@ -1,9 +1,9 @@
-function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
+function periodic_test(points,runtime,t_corr,plot_each_step)
 
     % runtime is the total physical simulation time, not the number of
     % integration steps. For example, runtime = 500 simulates t = 0..500.
     % plot_each_step controls live animation. Snapshots are always saved
-    % every snapshot_dt, and periodic_test_optimized always performs exactly one run.
+    % every snapshot_dt, and periodic_test always performs exactly one run.
 
     if ~(isscalar(plot_each_step) && ...
             (islogical(plot_each_step) || ...
@@ -16,7 +16,7 @@ function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
     % Important Parameters
     %=====================================
 
-    dt = 0.01;
+    dt = 0.1;
     snapshot_dt = 0.1;
     corr_time = t_corr/dt;
 
@@ -49,8 +49,8 @@ function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
         noise_mode = ['gaussian_white'];
     end
 
-    noise_amplitude = 0.4; % A for fixed-strength active noise
-    eta_std_fixed_variance = 0.5;
+    noise_amplitude = 0.5; % A for fixed-strength active noise
+    eta_std_fixed_variance = 2;
 
     if strcmp(noise_mode,'active_fixed_strength')
         % C(Delta t) = (A/tauc) exp(-|Delta t|/tauc)
@@ -70,42 +70,12 @@ function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
     %===================================
     % Creating the Graph Laplacian
     %=====================================
+    % might consider putting more effort into optimizing this
 
     e = ones(points,1);
     glaplacian = spdiags([e 0*e e],-1:1,points,points);
     glaplacian(1,points)=1;
     glaplacian(points,1)=1;
-
-    %===================================
-    % Precomputing the timestep matrices
-    %=====================================
-
-    DX = 1;
-    DY = 5;
-    %gamma = 5;
-    t_v = 15;
-    %t_v = 6;
-    gamma = 1/t_v;
-
-    betavar = 0.7*gamma;
-    alphavar = 0.5*gamma;
-    epsilon = 1;
-    %epsilon = 0.01;
-    a = 0.1*sqrt(epsilon);
-    %epsilon = (a*10)^2;
-
-    mu1 = DX*dt/a/a/2;
-    mu2 = DY*dt/a/a/2;
-    identity = speye(points);
-
-    Amat1 = (1+2*mu1)*identity - mu1*glaplacian;
-    Bmat1 = (1-2*mu1)*identity + mu1*glaplacian;
-    Amat2 = (1+2*mu2+alphavar*dt/2)*identity - mu2*glaplacian;
-    Bmat2 = (1-2*mu2-alphavar*dt/2)*identity + mu2*glaplacian;
-    C = (dt/2)*identity;
-
-    BigA = [Amat1 sparse(points,points); -C*gamma Amat2];
-    BigA_solver = decomposition(BigA,'lu');
 
     %=====================================
     % Simulation Loop
@@ -113,7 +83,7 @@ function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
 
     % Some initial conditions for the single diagnostic run
     X = ones(points,1)*-1.0;
-    Y = ones(points,1)*-0.4;
+    Y = ones(points,1)*-0.6;
     %Y = ones(points,1)*(0.7 - 1)/0.6;
     %X(1)=1;
     eta = zeros(points,1);
@@ -279,26 +249,59 @@ function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
 
     function [Xnew, Ynew, eta_new] = rd_step_active(X,Y,eta)
 
+        %Constants relevant to the equation
+        %==================================
+        DX = 1;
+        DY = 5;
+        %gamma = 5;
+        t_v = 20;
+        %t_v = 6;
+        gamma = 1/t_v;
+
+        betavar = 0.7*gamma;
+        alphavar = 0.5*gamma;
+        epsilon = 1;
+        %epsilon = 0.01;
+        a = 0.1*sqrt(epsilon);
+        %epsilon = (a*10)^2;
+        %===================================
+
+
         phi = (1/epsilon)*(1.-(X.*X)).*(X-Y);
         phinew = phi;
 
+        mu1 = DX*dt/a/a/2;
+        mu2 = DY*dt/a/a/2;
+        Amat1 = -1*mu1*glaplacian;
+        Amat2 = -1*mu2*glaplacian;
+        Bmat1 = mu1*glaplacian;
+        Bmat2 = mu2*glaplacian;
+
+        for m = 1:points
+            Amat1(m,m) = (1+2*mu1);
+            Bmat1(m,m) = (1-2*mu1);
+            Amat2(m,m) = (1+2*mu2) + alphavar*dt/2;
+            Bmat2(m,m) = (1-2*mu2) - alphavar*dt/2;
+        end
+
+        C = spdiags((dt/2)*ones(points,1),0,points,points);
+
+        BigA = [Amat1 zeros(points); -C*gamma Amat2];
         b1 = Bmat1*X+dt/2*(phi+phinew);
         b2 = dt*betavar + Bmat2*Y + gamma*X*dt/2;
-        XYnew = BigA_solver\[b1;b2];
+        XYnew = BigA\[b1;b2];
         Xnew = XYnew(1:points);
         Ynew = XYnew(points+1:end);
         phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
 
         %fixed point iteration, up to machine precision
-        iterations = 0;
-        while (norm(phinewer-phinew)>(1*10^-10) && iterations <100)
-            b1 = Bmat1*X+dt/2*(phi+phinewer);
-            XYnew = BigA_solver\[b1;b2];
+        while norm(phinewer-phinew)>(1*10^-15)
+            b1 = Bmat1*X+dt/2*(phi+phinew);
+            XYnew = BigA\[b1;b2];
             Xnew = XYnew(1:points);
             Ynew = XYnew(points+1:end);
             phinew = phinewer;
             phinewer = (1/epsilon)*(1.-(Xnew.*Xnew)).*(Xnew-Ynew);
-            iterations = iterations + 1;
         end
         if strcmp(noise_mode,'gaussian_white')
             eta_new = normrnd(0,sigma_white/sqrt(dt),points,1);
