@@ -3,3 +3,12 @@
 
 # MATLAB autosave files
 *.asv
+
+# Local reference documents
+reference_pdfs/
+
+# Local simulation analysis and collected outputs
+collected_data/
+
+# Temporary review and intermediate files
+tmp/

@@ -1,0 +1,262 @@
+\section{Numerically Solving the 2-Dimensional System}
+
+Now, we apply our methods in the previous section to solve the stochastic
+FitzHugh--Nagumo system.  We use \(u\) for the activator field and \(v\) for
+the inhibitor field throughout:
+\begin{align}
+  \frac{\partial u}{\partial t}
+    &= D_u \nabla^2 u
+      + \frac{1}{\tau_u}(1-u^2)(u-v)
+      + \eta(\mathbf r,t),
+      \label{eq:fhn-u}\\
+  \frac{\partial v}{\partial t}
+    &= D_v \nabla^2 v
+      + \frac{1}{\tau_v}(u-\alpha v+\beta).
+      \label{eq:fhn-v}
+\end{align}
+Here, \(D_u\) and \(D_v\) are the diffusion constants, while \(\tau_u\)
+and \(\tau_v\) are the characteristic response times of the activator and
+inhibitor, respectively.  The parameters \(\alpha\) and \(\beta\) determine
+the relaxation and homogeneous steady-state value of the inhibitor.  The
+noise field \(\eta\) acts only on the activator.  The one-dimensional
+simulations considered in the accompanying work are obtained by replacing
+\(\nabla^2\) with \(\partial_\ell^2\) and imposing periodic boundary
+conditions.
+
+\subsection{Attempting to Linearize the Non-linearity}
+
+In all the algebra that will follow, it is easy to lose track of our goal.
+As such, we will explicitly state it as finding an update rule that
+satisfies
+\begin{equation}
+  \boldsymbol{\psi}^{n+1}
+    = \mathcal M\!\left(\boldsymbol{\psi}^n,
+      \boldsymbol{\eta}^{n+1}\right),
+  \qquad
+  \boldsymbol{\psi}^n \equiv
+  \begin{bmatrix}
+    \boldsymbol u^n\\
+    \boldsymbol v^n
+  \end{bmatrix},
+  \label{eq:update-goal}
+\end{equation}
+where the upper index \(n\) characterizes the current time step and bold
+symbols denote vectors containing the values at all spatial grid points.
+Because the activator equation is non-linear and stochastic,
+\(\mathcal M\) is not a single constant matrix.  Nevertheless, each
+deterministic Crank--Nicolson step can be reduced to a linear solve and a
+fixed-point iteration.
+
+We see that the difference between Eq.~\eqref{eq:fhn-u} and the simple
+diffusion equation is the non-linearity.  For reasons that will later
+become clear, we let it be represented by the function
+\begin{equation}
+  \varphi(t,u,v)
+    \equiv \frac{1}{\tau_u}(1-u^2)(u-v).
+  \label{eq:phi-definition}
+\end{equation}
+Despite the problems that this presents, it is worth noting now that
+\(\varphi\) is easy to compute given full knowledge of \(u\) and \(v\) at
+a given time.  We first omit the noise term and rewrite the deterministic
+part of the equations as
+\begin{align}
+  \frac{\partial u}{\partial t}
+    &= D_u\nabla^2u+\varphi,
+    \label{eq:deterministic-u}\\
+  \frac{\partial v}{\partial t}
+    &= D_v\nabla^2v+\frac{1}{\tau_v}(u-\alpha v+\beta).
+    \label{eq:deterministic-v}
+\end{align}
+The noise will be applied after this deterministic step, in the same
+operator-split form used by the simulations.
+
+Let \(\mathbf L\) be the matrix that approximates the Laplacian on the
+spatial grid.  For the current one-dimensional periodic simulations,
+\begin{equation}
+  \mathbf L = \frac{1}{a^2}(\mathbf G-2\mathbf I),
+  \label{eq:periodic-laplacian}
+\end{equation}
+where \(a\) is the lattice spacing and \(\mathbf G\) has entries equal to
+one for the two neighboring grid points, including the two corner entries
+that enforce the periodic boundary condition.  For the triangulated
+spherical surface, \(\mathbf L\) is replaced by the graph-based Laplacian
+described in the Appendix.  The derivation below is unchanged once
+\(\mathbf L\) has been chosen.
+
+Applying Crank--Nicolson to the deterministic equations gives
+\begin{align}
+  \frac{\overline{\boldsymbol u}^{\,n+1}-\boldsymbol u^n}{\Delta t}
+    &=
+      \frac{D_u}{2}\mathbf L
+      \left(\overline{\boldsymbol u}^{\,n+1}+\boldsymbol u^n\right)
+      +\frac{1}{2}
+      \left(\boldsymbol\varphi^{n+1}
+      +\boldsymbol\varphi^n\right),
+      \label{eq:cn-u}\\
+  \frac{\overline{\boldsymbol v}^{\,n+1}-\boldsymbol v^n}{\Delta t}
+    &=
+      \frac{D_v}{2}\mathbf L
+      \left(\overline{\boldsymbol v}^{\,n+1}+\boldsymbol v^n\right)
+      +\frac{1}{2\tau_v}
+      \left[
+        \overline{\boldsymbol u}^{\,n+1}+\boldsymbol u^n
+        -\alpha\left(
+          \overline{\boldsymbol v}^{\,n+1}+\boldsymbol v^n
+        \right)
+        +2\beta\boldsymbol 1
+      \right].
+      \label{eq:cn-v}
+\end{align}
+The overline denotes the result of the deterministic substep, before the
+noise is added.  We define
+\begin{align}
+  \mathbf A_u
+    &\equiv \mathbf I-\frac{D_u\Delta t}{2}\mathbf L,
+  &\mathbf B_u
+    &\equiv \mathbf I+\frac{D_u\Delta t}{2}\mathbf L,
+    \label{eq:uv-matrices-u}\\
+  \mathbf A_v
+    &\equiv \mathbf I-\frac{D_v\Delta t}{2}\mathbf L
+      +\frac{\alpha\Delta t}{2\tau_v}\mathbf I,
+  &\mathbf B_v
+    &\equiv \mathbf I+\frac{D_v\Delta t}{2}\mathbf L
+      -\frac{\alpha\Delta t}{2\tau_v}\mathbf I,
+    \label{eq:uv-matrices-v}\\
+  \mathbf C
+    &\equiv \frac{\Delta t}{2}\mathbf I.
+  &&
+  \label{eq:c-matrix}
+\end{align}
+With these definitions, Eqs.~\eqref{eq:cn-u} and \eqref{eq:cn-v} can be
+put into matrix form:
+\begin{equation}
+  \begin{bmatrix}
+    \mathbf A_u & \mathbf 0\\
+    -\mathbf C/\tau_v & \mathbf A_v
+  \end{bmatrix}
+  \begin{bmatrix}
+    \overline{\boldsymbol u}^{\,n+1}\\
+    \overline{\boldsymbol v}^{\,n+1}
+  \end{bmatrix}
+  =
+  \begin{bmatrix}
+    \mathbf B_u & \mathbf 0\\
+    \mathbf C/\tau_v & \mathbf B_v
+  \end{bmatrix}
+  \begin{bmatrix}
+    \boldsymbol u^n\\
+    \boldsymbol v^n
+  \end{bmatrix}
+  +
+  \begin{bmatrix}
+    \mathbf C\left(
+      \boldsymbol\varphi^n+\boldsymbol\varphi^{n+1}
+    \right)\\
+    (\beta\Delta t/\tau_v)\boldsymbol 1
+  \end{bmatrix}.
+  \label{eq:block-system}
+\end{equation}
+We see that we could not put the problem into the constant-matrix form
+that we originally wanted, but as it turns out, this is good enough.
+
+Assuming that \(\boldsymbol\varphi^{n+1}\) is a fixed point, we can use
+fixed-point iteration to find a stable solution.  Let
+\(\boldsymbol\varphi^{n+1,0}=\boldsymbol\varphi^n\) be our initial guess.
+At iteration \(k\), we solve
+\begin{equation}
+  \begin{bmatrix}
+    \mathbf A_u & \mathbf 0\\
+    -\mathbf C/\tau_v & \mathbf A_v
+  \end{bmatrix}
+  \begin{bmatrix}
+    \overline{\boldsymbol u}^{\,n+1,k+1}\\
+    \overline{\boldsymbol v}^{\,n+1,k+1}
+  \end{bmatrix}
+  =
+  \begin{bmatrix}
+    \mathbf B_u & \mathbf 0\\
+    \mathbf C/\tau_v & \mathbf B_v
+  \end{bmatrix}
+  \begin{bmatrix}
+    \boldsymbol u^n\\
+    \boldsymbol v^n
+  \end{bmatrix}
+  +
+  \begin{bmatrix}
+    \mathbf C\left(
+      \boldsymbol\varphi^n+\boldsymbol\varphi^{n+1,k}
+    \right)\\
+    (\beta\Delta t/\tau_v)\boldsymbol 1
+  \end{bmatrix}.
+  \label{eq:fixed-point-system}
+\end{equation}
+We then use \(\overline{\boldsymbol u}^{\,n+1,k+1}\) and
+\(\overline{\boldsymbol v}^{\,n+1,k+1}\) to calculate
+\(\boldsymbol\varphi^{n+1,k+1}\) from Eq.~\eqref{eq:phi-definition}.  We
+repeat until successive values of \(\boldsymbol\varphi\) converge.  In the
+current simulations, the iteration stops when their norm differs by less
+than \(10^{-10}\), with a maximum of \(100\) iterations.
+
+\subsection{Active Noise in the Simulations}
+
+The active noise in Eq.~\eqref{eq:fhn-u} is an
+Ornstein--Uhlenbeck process with zero mean and autocovariance
+\begin{equation}
+  \left\langle
+    \eta(\ell,t)\eta(\ell',t')
+  \right\rangle
+  =
+  \delta(\ell-\ell')\frac{A}{\tau_c}
+  \exp\left(-\frac{|t-t'|}{\tau_c}\right).
+  \label{eq:noise-covariance}
+\end{equation}
+Here, \(A\) is the integrated noise strength and \(\tau_c\) is the
+correlation time.  Equivalently, the noise field satisfies
+\begin{equation}
+  \frac{\partial\eta}{\partial t}
+    =-\frac{\eta}{\tau_c}
+      +\frac{\sqrt{2A}}{\tau_c}\xi(\ell,t),
+  \label{eq:ou-equation}
+\end{equation}
+where \(\xi\) is a Gaussian white-noise field.  We discretize this equation
+using Euler--Maruyama:
+\begin{equation}
+  \eta_i^{n+1}
+    =\left(1-\frac{\Delta t}{\tau_c}\right)\eta_i^n
+      +\frac{\sqrt{2A\Delta t}}{\tau_c}\xi_i^n,
+  \label{eq:ou-update}
+\end{equation}
+where each \(\xi_i^n\) is an independent standard Gaussian random
+variable.  After the deterministic fixed-point iteration has converged,
+the operator-split noise update is
+\begin{equation}
+  \boldsymbol u^{n+1}
+    =\overline{\boldsymbol u}^{\,n+1}
+      +\Delta t\,\boldsymbol\eta^{n+1},
+  \qquad
+  \boldsymbol v^{n+1}
+    =\overline{\boldsymbol v}^{\,n+1}.
+  \label{eq:split-noise-update}
+\end{equation}
+When \(\tau_c=0\), the simulations use the Gaussian white-noise limit
+directly:
+\begin{equation}
+  \boldsymbol u^{n+1}
+    =\overline{\boldsymbol u}^{\,n+1}
+      +\sqrt{2A\Delta t}\,\boldsymbol\xi^n.
+  \label{eq:white-noise-update}
+\end{equation}
+
+For comparison with the numerical results, time is measured in units for
+which \(\tau_u=1\).  The simulations use
+\(D_u=1\), \(D_v=5\), \(\alpha=0.5\), and \(\beta=0.7\), while
+\(\tau_v\), \(\tau_c\), and \(A\) are varied.  The homogeneous quiescent
+initial state is
+\begin{equation}
+  u_0=-1,
+  \qquad
+  v_0=\frac{\beta-1}{\alpha}=-0.6.
+  \label{eq:quiescent-state}
+\end{equation}
+For the current periodic grid, the lattice spacing is \(a=0.1\), and
+simulation snapshots are recorded every \(0.1\) time units.

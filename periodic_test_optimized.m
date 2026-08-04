@@ -43,7 +43,7 @@ function periodic_test_optimized(points,runtime,t_corr,plot_each_step)
     %   'active_fixed_variance'
     %   'gaussian_white'
 
-    noise_mode = ['active_fixed_strength'];
+    noise_mode = ['active_fixed_variance'];
 
     if (t_corr == 0)
         noise_mode = ['gaussian_white'];

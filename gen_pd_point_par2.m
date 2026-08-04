@@ -1,4 +1,4 @@
-function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par2(points,physical_runtime,runs,t_corr,t_v,dt,A,snapshot_dt)
+function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par2(points,physical_runtime,runs,t_corr,t_v,dt,noise_parameter,snapshot_dt,noise_mode,Y_initial)
 
     %=====================================
     % Important Parameters
@@ -10,19 +10,46 @@ function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par2(poi
     num_snapshots = round(physical_runtime/snapshot_dt);
 
 
-    % Choose one noise process:
+    % Choose one noise process. The optional arguments preserve the
+    % original fixed-strength behavior for existing callers.
     %   'active_fixed_strength'
     %   'active_fixed_variance'
     %   'gaussian_white'
 
-    noise_mode = ['active_fixed_strength'];
-
-    if (t_corr == 0)
-        noise_mode = ['gaussian_white'];
+    if nargin < 9 || isempty(noise_mode)
+        noise_mode = 'active_fixed_strength';
+    end
+    if nargin < 10 || isempty(Y_initial)
+        Y_initial = -0.6;
     end
 
-    noise_amplitude = A; % A for fixed-strength active noise
-    eta_std_fixed_variance = 2;
+    if ~(ischar(noise_mode) || (isstring(noise_mode) && isscalar(noise_mode)))
+        error('noise_mode must be a character vector or string scalar.');
+    end
+    noise_mode = char(noise_mode);
+    valid_noise_modes = {'active_fixed_strength', ...
+        'active_fixed_variance', 'gaussian_white'};
+    if ~ismember(noise_mode, valid_noise_modes)
+        error('Unknown noise_mode: %s', noise_mode);
+    end
+    if ~(isnumeric(noise_parameter) && isreal(noise_parameter) && ...
+            isscalar(noise_parameter) && isfinite(noise_parameter) && ...
+            noise_parameter >= 0)
+        error('noise_parameter must be a nonnegative finite scalar.');
+    end
+    if ~(isnumeric(Y_initial) && isreal(Y_initial) && ...
+            isscalar(Y_initial) && isfinite(Y_initial))
+        error('Y_initial must be a finite real scalar.');
+    end
+
+    if t_corr == 0 && strcmp(noise_mode,'active_fixed_strength')
+        noise_mode = 'gaussian_white';
+    elseif t_corr <= 0 && strcmp(noise_mode,'active_fixed_variance')
+        error('t_corr must be positive for active_fixed_variance noise.');
+    end
+
+    noise_amplitude = noise_parameter; % A for fixed-strength/white noise
+    eta_std_fixed_variance = noise_parameter; % sigma_eta for fixed variance
     sigma_active = NaN;
     sigma_white = NaN;
 
@@ -96,7 +123,7 @@ function [pd_val, patch_run_percent, avg_patch_lifetime] = gen_pd_point_par2(poi
         % Some initial conditions for system
         xmat = zeros(points,num_snapshots);
         X = ones(points,1)*-1.0;
-        Y = ones(points,1)*-0.6;
+        Y = ones(points,1)*Y_initial;
         %Y = ones(points,1)*(0.7 - 1)/0.6;
         %X(1)=1;
         eta = zeros(points,1);
